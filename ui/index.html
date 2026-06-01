@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ALBON PBR Control</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow:wght@400;600;700&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --bg:        #0d0f0e;
+  --surface:   #141918;
+  --border:    #2a3330;
+  --green:     #3ddc84;
+  --green-dim: #1f6b42;
+  --amber:     #f5a623;
+  --red:       #e84040;
+  --blue:      #4ab8e8;
+  --text:      #c8d8d2;
+  --text-dim:  #5a7060;
+  --mono:      'Share Tech Mono', monospace;
+  --sans:      'Barlow', sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 14px;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Scanline texture overlay */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,.05) 2px, rgba(0,0,0,.05) 4px);
+  pointer-events: none;
+  z-index: 999;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  position: sticky; top: 0; z-index: 100;
+}
+
+.logo {
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 0.15em;
+  color: var(--green);
+}
+.logo span { color: var(--text-dim); font-weight: 400; font-size: 12px; margin-left: 12px; letter-spacing: 0.08em; }
+
+.conn-status {
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+.conn-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--red);
+  transition: background .3s;
+  box-shadow: 0 0 6px var(--red);
+}
+.conn-dot.live { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.conn-dot.live { animation: pulse-dot 2s infinite; }
+@keyframes pulse-dot { 0%,100%{ opacity:1 } 50%{ opacity:0.5 } }
+
+main {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: auto auto auto;
+  gap: 16px;
+  padding: 20px 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.panel-header {
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.panel-body { padding: 16px; }
+
+/* Sensor grid */
+.sensors-panel { grid-column: 1 / 3; }
+
+.sensor-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.sensor-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 14px 16px;
+  position: relative;
+  transition: border-color .3s;
+}
+.sensor-card.alert { border-color: var(--red); }
+.sensor-card.warn  { border-color: var(--amber); }
+
+.sensor-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.sensor-value {
+  font-family: var(--mono);
+  font-size: 28px;
+  font-weight: 400;
+  color: var(--green);
+  transition: color .3s;
+  line-height: 1;
+}
+.sensor-value.alert { color: var(--red); }
+.sensor-value.warn  { color: var(--amber); }
+
+.sensor-unit {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
+/* Chart sparkline */
+.sparkline { margin-top: 8px; height: 28px; }
+canvas.spark { width: 100%; height: 28px; display: block; }
+
+/* Actuators panel */
+.actuators-panel { grid-column: 3 / 4; grid-row: 1 / 3; }
+
+.actuator-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.actuator-row:last-child { border-bottom: none; }
+
+.actuator-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  color: var(--text);
+}
+.actuator-sub {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+/* Toggle switch */
+.toggle {
+  position: relative;
+  width: 44px; height: 22px;
+  cursor: pointer;
+}
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle-track {
+  position: absolute; inset: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  transition: background .2s, border-color .2s;
+}
+.toggle input:checked + .toggle-track { background: var(--green-dim); border-color: var(--green); }
+.toggle-track::after {
+  content: '';
+  position: absolute;
+  left: 3px; top: 3px;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  transition: transform .2s, background .2s;
+}
+.toggle input:checked + .toggle-track::after { transform: translateX(22px); background: var(--green); }
+
+/* Slider for LED */
+.led-row { flex-direction: column; align-items: flex-start; gap: 8px; }
+.led-row .actuator-label-row { display: flex; width: 100%; justify-content: space-between; align-items: center; }
+input[type=range] {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--green);
+  cursor: pointer;
+  box-shadow: 0 0 4px var(--green);
+}
+
+/* Confirm button */
+.btn-confirm {
+  margin-top: 12px;
+  width: 100%;
+  padding: 8px 0;
+  background: transparent;
+  border: 1px solid var(--green);
+  color: var(--green);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background .2s;
+  text-transform: uppercase;
+}
+.btn-confirm:hover { background: var(--green-dim); }
+.btn-confirm:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* Alerts panel */
+.alerts-panel { grid-column: 1 / 3; }
+.alert-list { list-style: none; }
+.alert-item {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--red);
+  display: flex;
+  gap: 12px;
+}
+.alert-item .alert-time { color: var(--text-dim); min-width: 80px; }
+.no-alerts { font-family: var(--mono); font-size: 11px; color: var(--green); padding: 8px 0; }
+
+/* Metrics bar */
+.metrics-panel { grid-column: 1 / 4; }
+.metrics-row {
+  display: flex;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+.metric { display: flex; flex-direction: column; gap: 2px; }
+.metric-label { font-family: var(--mono); font-size: 9px; letter-spacing: 0.1em; color: var(--text-dim); text-transform: uppercase; }
+.metric-value { font-family: var(--mono); font-size: 18px; color: var(--blue); }
+
+/* Log panel */
+.log-panel { grid-column: 1 / 4; }
+.log-output {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  height: 80px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.log-output .log-info  { color: var(--text-dim); }
+.log-output .log-warn  { color: var(--amber); }
+.log-output .log-error { color: var(--red); }
+.log-output .log-ok    { color: var(--green); }
+
+/* Disconnected overlay */
+#offline-banner {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  background: var(--red);
+  color: #fff;
+  text-align: center;
+  padding: 6px;
+  font-family: var(--mono);
+  font-size: 12px;
+  z-index: 200;
+  letter-spacing: 0.08em;
+}
+#offline-banner.visible { display: block; animation: blink-banner 1s infinite; }
+@keyframes blink-banner { 0%,100%{ opacity:1 } 50%{ opacity:0.7 } }
+
+.ts-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text-dim);
+}
+</style>
+</head>
+<body>
+
+<div id="offline-banner">⚠ CONNECTION LOST — CONTROLS DISABLED — STALE DATA — RECONNECTING…</div>
+
+<header>
+  <div class="logo">ALBON <span>PBR CONTROL SYSTEM · WILEY PARK</span></div>
+  <div class="conn-status">
+    <div class="conn-dot" id="conn-dot"></div>
+    <span id="conn-label">DISCONNECTED</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- Sensors -->
+  <div class="panel sensors-panel">
+    <div class="panel-header">
+      <span>SENSOR TELEMETRY</span>
+      <span class="ts-label" id="last-ts">–</span>
+    </div>
+    <div class="panel-body">
+      <div class="sensor-grid">
+        <div class="sensor-card" id="card-ph">
+          <div class="sensor-label">pH</div>
+          <div class="sensor-value" id="val-ph">–</div>
+          <div class="sensor-unit">pH units · range 6.0 – 8.5</div>
+          <div class="sparkline"><canvas class="spark" id="spark-ph"></canvas></div>
+        </div>
+        <div class="sensor-card" id="card-do">
+          <div class="sensor-label">Dissolved Oxygen</div>
+          <div class="sensor-value" id="val-do">–</div>
+          <div class="sensor-unit">mg/L · range 2.0 – 15.0</div>
+          <div class="sparkline"><canvas class="spark" id="spark-do"></canvas></div>
+        </div>
+        <div class="sensor-card" id="card-temp">
+          <div class="sensor-label">Temperature</div>
+          <div class="sensor-value" id="val-temp">–</div>
+          <div class="sensor-unit">°C · range 15.0 – 35.0</div>
+          <div class="sparkline"><canvas class="spark" id="spark-temp"></canvas></div>
+        </div>
+        <div class="sensor-card" id="card-turb">
+          <div class="sensor-label">Turbidity</div>
+          <div class="sensor-value" id="val-turb">–</div>
+          <div class="sensor-unit">NTU · range 0 – 100</div>
+          <div class="sparkline"><canvas class="spark" id="spark-turb"></canvas></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Actuators -->
+  <div class="panel actuators-panel">
+    <div class="panel-header">
+      <span>ACTUATOR CONTROL</span>
+      <span class="ts-label" id="ctrl-status">PENDING CONFIRM</span>
+    </div>
+    <div class="panel-body">
+      <div class="actuator-row">
+        <div>
+          <div class="actuator-label">FEED PUMP</div>
+          <div class="actuator-sub">pump_feed</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="act-pump_feed" disabled onchange="queueCommand('pump_feed', this.checked)"/>
+          <div class="toggle-track"></div>
+        </label>
+      </div>
+      <div class="actuator-row">
+        <div>
+          <div class="actuator-label">RECIRC PUMP</div>
+          <div class="actuator-sub">pump_recirculation</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="act-pump_recirculation" disabled onchange="queueCommand('pump_recirculation', this.checked)"/>
+          <div class="toggle-track"></div>
+        </label>
+      </div>
+      <div class="actuator-row">
+        <div>
+          <div class="actuator-label">CO₂ VALVE</div>
+          <div class="actuator-sub">co2_valve</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="act-co2_valve" disabled onchange="queueCommand('co2_valve', this.checked)"/>
+          <div class="toggle-track"></div>
+        </label>
+      </div>
+      <div class="actuator-row led-row">
+        <div class="actuator-label-row">
+          <div>
+            <div class="actuator-label">LED INTENSITY</div>
+            <div class="actuator-sub">led_intensity</div>
+          </div>
+          <span class="sensor-value" id="led-val" style="font-size:16px">–%</span>
+        </div>
+        <input type="range" id="act-led_intensity" min="0" max="100" value="0" disabled
+               oninput="document.getElementById('led-val').textContent=this.value+'%'"
+               onchange="queueCommand('led_intensity', parseInt(this.value))"/>
+      </div>
+      <button class="btn-confirm" id="btn-send" onclick="sendPendingCommands()" disabled>
+        ▶ CONFIRM &amp; SEND COMMANDS
+      </button>
+    </div>
+  </div>
+
+  <!-- Alerts -->
+  <div class="panel alerts-panel">
+    <div class="panel-header"><span>SYSTEM ALERTS</span><span id="alert-count" class="ts-label">0 ACTIVE</span></div>
+    <div class="panel-body">
+      <ul class="alert-list" id="alert-list">
+        <li class="no-alerts">No active alerts</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Metrics -->
+  <div class="panel metrics-panel">
+    <div class="panel-header"><span>SYSTEM METRICS</span></div>
+    <div class="panel-body">
+      <div class="metrics-row">
+        <div class="metric"><div class="metric-label">Uptime</div><div class="metric-value" id="m-uptime">–</div></div>
+        <div class="metric"><div class="metric-label">Msg Rate /min</div><div class="metric-value" id="m-rate">–</div></div>
+        <div class="metric"><div class="metric-label">WS Latency ms</div><div class="metric-value" id="m-latency">–</div></div>
+        <div class="metric"><div class="metric-label">Connected Clients</div><div class="metric-value" id="m-clients">–</div></div>
+        <div class="metric"><div class="metric-label">Reconnects</div><div class="metric-value" id="m-reconnects">0</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Log -->
+  <div class="panel log-panel">
+    <div class="panel-header"><span>EVENT LOG</span></div>
+    <div class="panel-body"><div class="log-output" id="log"></div></div>
+  </div>
+
+</main>
+
+<script>
+
+const HISTORY = { ph: [], do: [], temp: [], turb: [] };
+const MAX_HIST = 60;
+let ws = null;
+let wsConnected = false;
+let reconnectCount = 0;
+let reconnectTimer = null;
+let pendingCommands = {};
+let lastPingTs = null;
+let controlsEnabled = false;
+let pingInterval = null;
+
+
+function uiLog(msg, level='info') {
+  const el = document.getElementById('log');
+  const ts = new Date().toISOString().split('T')[1].slice(0,8);
+  const span = document.createElement('span');
+  span.className = `log-${level}`;
+  span.textContent = `[${ts}] ${msg}\n`;
+  el.appendChild(span);
+  el.scrollTop = el.scrollHeight;
+}
+
+
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const url = `${proto}://${location.host}/ws`;
+  uiLog(`Connecting to ${url}…`);
+  ws = new WebSocket(url);
+
+  ws.onopen = () => {
+    wsConnected = true;
+    reconnectCount++;
+    document.getElementById('m-reconnects').textContent = reconnectCount - 1;
+    setConnected(true);
+    uiLog('WebSocket connected — awaiting actuator confirmation', 'ok');
+    
+    // Start pinging the server every 2 seconds to measure latency
+    pingInterval = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'ping', ts: performance.now() }));
+      }
+    }, 2000);
+  };
+
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+
+    if (msg.type === 'pong') {
+        const latency = Math.round(performance.now() - msg.client_ts);
+        document.getElementById('m-latency').textContent = latency;
+        return; 
+    }
+
+    if (msg.type === 'telemetry') handleTelemetry(msg);
+    if (msg.type === 'actuator_update') handleActuatorUpdate(msg);
+    if (msg.type === 'actuator_confirm') handleActuatorConfirm(msg);
+  };
+
+  ws.onclose = () => {
+    wsConnected = false;
+    pendingCommands = {};
+    setConnected(false);
+    if (pingInterval) clearInterval(pingInterval);
+    document.getElementById('m-latency').textContent = '–';
+    
+    uiLog('Connection lost — controls disabled, scheduling reconnect…', 'error');
+    reconnectTimer = setTimeout(connect, 3000);
+  };
+
+  ws.onerror = () => {
+    uiLog('WebSocket error', 'error');
+  };
+}
+
+function setConnected(ok) {
+  document.getElementById('conn-dot').className = 'conn-dot' + (ok ? ' live' : '');
+  document.getElementById('conn-label').textContent = ok ? 'LIVE' : 'DISCONNECTED';
+  document.getElementById('offline-banner').className = ok ? '' : 'visible';
+  controlsEnabled = false; 
+  setControlsEnabled(false);
+}
+
+function setControlsEnabled(en) {
+  controlsEnabled = en;
+  ['pump_feed','pump_recirculation','co2_valve','led_intensity'].forEach(id => {
+    document.getElementById(`act-${id}`).disabled = !en;
+  });
+  document.getElementById('ctrl-status').textContent = en ? 'CONFIRMED' : 'PENDING CONFIRM';
+  updateSendButton();
+}
+
+
+function handleTelemetry(msg) {
+  const s = msg.sensors;
+  document.getElementById('last-ts').textContent = new Date(s.timestamp).toLocaleTimeString();
+  document.getElementById('m-uptime').textContent = formatUptime(msg.server_uptime_s);
+
+  updateSensor('ph',   s.ph,   [6.0, 8.5]);
+  updateSensor('do',   s.dissolved_oxygen, [2.0, 15.0]);
+  updateSensor('temp', s.temperature,      [15.0, 35.0]);
+  updateSensor('turb', s.turbidity,        [0, 100]);
+
+  updateActuatorDisplays(msg.actuators);
+  updateAlerts(msg.alerts);
+}
+
+function updateSensor(key, val, [lo, hi]) {
+  const display = { ph: val, do: val, temp: val, turb: val }[key];
+  const el = document.getElementById(`val-${key}`);
+  const card = document.getElementById(`card-${key}`);
+  el.textContent = val.toFixed(2);
+  const isAlert = val < lo || val > hi;
+  el.className = 'sensor-value' + (isAlert ? ' alert' : '');
+  card.className = 'sensor-card' + (isAlert ? ' alert' : '');
+
+  const hist = HISTORY[key];
+  hist.push(val);
+  if (hist.length > MAX_HIST) hist.shift();
+  drawSparkline(`spark-${key}`, hist, lo, hi, isAlert);
+}
+
+function drawSparkline(id, data, lo, hi, isAlert) {
+  const canvas = document.getElementById(id);
+  if (!canvas) return;
+  const W = canvas.offsetWidth || 200, H = 28;
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+  if (data.length < 2) return;
+  const min = Math.min(...data), max = Math.max(...data);
+  const range = max - min || 1;
+  ctx.beginPath();
+  ctx.strokeStyle = isAlert ? '#e84040' : '#3ddc84';
+  ctx.lineWidth = 1.5;
+  data.forEach((v, i) => {
+    const x = (i / (data.length - 1)) * W;
+    const y = H - ((v - min) / range) * (H - 4) - 2;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+}
+
+function updateAlerts(alerts) {
+  const list = document.getElementById('alert-list');
+  document.getElementById('alert-count').textContent = `${alerts.length} ACTIVE`;
+  if (alerts.length === 0) {
+    list.innerHTML = '<li class="no-alerts">No active alerts</li>';
+    return;
+  }
+  const ts = new Date().toLocaleTimeString();
+  list.innerHTML = alerts.map(a =>
+    `<li class="alert-item"><span class="alert-time">${ts}</span><span>${a}</span></li>`
+  ).join('');
+}
+
+function handleActuatorConfirm(msg) {
+  uiLog('Actuator state confirmed — controls enabled', 'ok');
+  updateActuatorDisplays(msg.actuators);
+  setControlsEnabled(true);
+}
+
+function handleActuatorUpdate(msg) {
+  updateActuatorDisplays(msg.actuators);
+  uiLog(`Actuator update from ${msg.operator}`, 'ok');
+}
+
+function updateActuatorDisplays(act) {
+['pump_feed','pump_recirculation','co2_valve'].forEach(k => {
+    if (!(k in pendingCommands)) {
+      document.getElementById(`act-${k}`).checked = act[k];
+    }
+  });
+  
+  if (!('led_intensity' in pendingCommands)) {
+    document.getElementById('act-led_intensity').value = act.led_intensity;
+    document.getElementById('led-val').textContent = act.led_intensity + '%';
+  }
+}
+
+
+function queueCommand(actuator, value) {
+  pendingCommands[actuator] = value;
+  updateSendButton();
+}
+
+function updateSendButton() {
+  const btn = document.getElementById('btn-send');
+  const hasPending = Object.keys(pendingCommands).length > 0;
+  btn.disabled = !controlsEnabled || !hasPending;
+  btn.textContent = hasPending
+    ? `▶ CONFIRM & SEND (${Object.keys(pendingCommands).length} pending)`
+    : '▶ CONFIRM & SEND COMMANDS';
+}
+
+async function sendPendingCommands() {
+  if (!controlsEnabled) return;
+  const cmds = { ...pendingCommands };
+  pendingCommands = {};
+  updateSendButton();
+
+  for (const [actuator, value] of Object.entries(cmds)) {
+    try {
+      const res = await fetch('/api/actuators/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actuator, value, operator: 'web-ui' }),
+      });
+      if (res.ok) {
+        uiLog(`CMD OK: ${actuator} = ${value}`, 'ok');
+      } else {
+        const err = await res.json();
+        uiLog(`CMD FAIL: ${actuator} — ${err.detail}`, 'error');
+      }
+    } catch (e) {
+      uiLog(`CMD ERROR: ${actuator} — ${e.message}`, 'error');
+    }
+  }
+}
+
+
+async function pollMetrics() {
+  try {
+    const r = await fetch('/api/metrics');
+    const m = await r.json();
+    document.getElementById('m-rate').textContent = m.message_rate_per_min;
+    document.getElementById('m-clients').textContent = m.connected_clients;
+  } catch {}
+}
+setInterval(pollMetrics, 5000);
+
+
+function formatUptime(s) {
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = Math.floor(s % 60);
+  return `${h}h${String(m).padStart(2,'0')}m${String(sec).padStart(2,'0')}s`;
+}
+
+
+uiLog('PBR Control UI initialised');
+connect();
+</script>
+</body>
+</html>
