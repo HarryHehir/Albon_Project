@@ -17,6 +17,8 @@ git clone <repo-url>
 # 2. Install dependencies
 pip install fastapi uvicorn websockets httpx pytest --break-system-packages
 
+#NOTE: Can also pip install pytest-html (can be used to generate html reports)
+
 # 3. Start the server
 uvicorn server.main:app --host 127.0.0.1 --port 8000
 
@@ -29,3 +31,6 @@ python client/operator_client.py monitor # live telemetry stream
 
 # 6. Run tests
 pytest tests/ -v
+
+#Note if you want html report run:
+pytest tests/ -v --html=report.html --self-contained-html
