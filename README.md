@@ -8,7 +8,7 @@ A modular IoT software stack for ALBON's solar-powered photobioreactor (PBR) pro
 
 ## To start Programs
 
-**Prerequisites:** Python 3.10+ (3.12 tested), `pip`
+**Prerequisites:** Python 3.10+ (3.14 tested), `pip`
 
 ```bash
 # 1. Clone and enter the project
