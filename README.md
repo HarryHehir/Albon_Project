@@ -23,7 +23,7 @@ pip install fastapi uvicorn websockets httpx pytest --break-system-packages
 uvicorn server.main:app --host 127.0.0.1 --port 8000
 
 # 4. Open the web UI
-# Visit [http://127.0.0.1:8000](http://127.0.0.1:8000) in any browser
+# Visit http://127.0.0.1:8000 in any browser
 
 # 5. (Optional) Run the CLI operator client
 python client/operator_client.py         # interactive shell
